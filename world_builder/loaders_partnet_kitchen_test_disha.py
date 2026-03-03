@@ -19,7 +19,7 @@ from world_builder.world_utils import get_partnet_doors, \
 ######################################################################################
 
 
-def place_in_cabinet(fridgestorage, cabbage, place=True, world=None, learned=True):
+def place_in_cabinet(fridgestorage, cabbage, place=True, world=None, learned=True, clamp_z=False):
     if not isinstance(fridgestorage, tuple):
         b = fridgestorage.body
         l = fridgestorage.link
@@ -31,9 +31,15 @@ def place_in_cabinet(fridgestorage, cabbage, place=True, world=None, learned=Tru
     old_pose = (x0, y0, z0), quat0
     x_offset = random.uniform(0.05, 0.1)
     y_offset = 0.2
+    z_offset = 0.02
     y0 = max(y0, get_aabb(b, link=l).lower[1] + y_offset)
     y0 = min(y0, get_aabb(b, link=l).upper[1] - y_offset)
     x0 = get_aabb(b, link=l).upper[0] - get_aabb_extent(get_aabb(cabbage))[0] / 2 - x_offset
+    if clamp_z:
+        ## clamp z so that if place_obj failed (e.g. cabinet already occupied), z is still within
+        ## the storage AABB rather than left at the object's original load height (e.g. floor z≈0.05)
+        z0 = max(z0, get_aabb(b, link=l).lower[2] + get_aabb_extent(get_aabb(cabbage))[2] / 2 + z_offset)
+        z0 = min(z0, get_aabb(b, link=l).upper[2] - get_aabb_extent(get_aabb(cabbage))[2] / 2 - z_offset)
     pose = ((x0, y0, z0), quat0)
     # print(f'loaders.place_in_cabinet from {nice(old_pose)} to {nice(pose)}')
 
@@ -556,8 +562,8 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
     if d_x_min is None:
         d_x_min = - 0.3
     instances = {k: None for k in counters}
-    n_objects = {k: 4 for k in categories}
-    n_objects['bottle'] = 4
+    n_objects = {k: 2 for k in categories}
+    n_objects['bottle'] = 2
 
     if world.note in [31]:
         braiser_bottom = world.name_to_object('braiser_bottom')
@@ -595,7 +601,7 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
         n_objects['bottle'] = 3
 
     # # weiyu debug
-    # counters["bottle"] = [world.name_to_object(n) for n in ["sink#1::sink_bottom"]]
+    counters["bottle"] = [world.name_to_object(n) for n in ["sink#1::sink_bottom"]]
 
     if verbose:
         print('-' * 20 + ' surfaces to sample movables ' + '-' * 20)
@@ -1113,8 +1119,7 @@ def load_braiser(world, supporter, x_min=None, verbose=False):
 
 
 def get_lid_pose_on_braiser(braiser):
-    body = braiser[0] if isinstance(braiser, tuple) else braiser
-    point, quat = get_pose(body)
+    point, quat = get_pose(braiser)
     r, p, y = euler_from_quat(quat)
     return (point, quat_from_euler((r, p, y + PI / 4)))
 
@@ -1435,8 +1440,48 @@ def sample_full_kitchen(world, verbose=True, pause=True, reachability_check=True
     """ step 7: place electronics and cooking appliances on counters """
     load_storage_spaces(world, epsilon=open_door_epsilon, make_doors_transparent=make_doors_transparent, verbose=verbose)
 
+    """ step 7.5: place a zucchini in the minifridge """
+    floor = world.name_to_body('floor')
+    cabbage = world.add_object(Movable(
+        load_asset('VeggieCabbage', x=0, y=0, yaw=random.uniform(-math.pi, math.pi),
+                   floor=floor, random_instance=True),
+        category='food'
+    ))
+    fridge_storage = world.name_to_object('minifridge::storage')
+    place_in_cabinet(fridge_storage, cabbage, world=world)
+
+
+    """ step 7.5: place eggs in the minifridge """
+    floor = world.name_to_body('floor')
+    egg = world.add_object(Movable(
+        load_asset('Egg', x=-0.1, y=0.2, yaw=random.uniform(-math.pi, math.pi),
+                   floor=floor, random_instance=True),
+        category='food'
+    ))
+    fridge_storage = world.name_to_object('minifridge::storage')
+    place_in_cabinet(fridge_storage, egg, world=world)
+    ## egg mesh at scale 0.03 has a very small z-extent, so place_in_cabinet leaves it near
+    ## world floor level (z≈0.04). Lift it to match the cabbage height (z≈0.54) so the arm
+    ## can reach it through the open fridge door without colliding with the fridge body.
+    ## Also shift +y so egg sits near the cabbage (both at y≈5.8), reducing the reach distance
+    ## from the robot's post-door-pull position (y≈6.5) — otherwise the 0.9m reach clips the fridge.
+    egg.adjust_pose(dz=0.5)
+
+    """ step 7.5: place salter in overhead cabinet (cabinettop::storage) """
+    salter = world.add_object(Movable(
+        load_asset('Salter', x=0, y=0, yaw=random.uniform(-math.pi, math.pi),
+                   floor=floor, random_instance=True),
+        category='salter'
+    ))
+    cabinettop_storage = world.name_to_object('cabinettop::storage')
+    ## clamp_z=True: place_obj fails silently when the cabinet is occupied by braiserbody,
+    ## leaving the salter at floor level (z≈0.05). Force z into the cabinet storage AABB.
+    place_in_cabinet(cabinettop_storage, salter, world=world, clamp_z=True)
+
     """ step 8: place movables on counters """
     movables = load_movables(world, counters, shelves, obstacles, x_food_min, reachability_check)
+
+
 
     set_camera_pose((4, 4, 3), (0, 4, 0))
     if pause:

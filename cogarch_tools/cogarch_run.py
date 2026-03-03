@@ -6,7 +6,7 @@ from os import listdir
 import copy
 import shutil
 
-from pybullet_tools.utils import disconnect, reset_simulation, VideoSaver, wait_unlocked, timeout, set_renderer
+from pybullet_tools.utils import disconnect, reset_simulation, VideoSaver, wait_unlocked, timeout, set_renderer, wait_for_user
 from pybullet_tools.bullet_utils import get_datetime, initialize_logs
 
 from lisdf_tools.lisdf_utils import pddlstream_from_dir
@@ -196,6 +196,9 @@ def run_agent(agent_class=HierarchicalAgent, config='config_dev.yaml', config_ro
 
     clear_planning_dir(run_dir=dirname(__file__))
     reset_simulation()
+    wait_for_user('Press Enter to exit...')
+    disconnect()
+
     # disconnect()
 
     # if reset:

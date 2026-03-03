@@ -217,7 +217,10 @@ class Object(Index):
         start_time = time.time()
         place_fn = sample_obj_in_body_link_space if isinstance(self, Space) else sample_obj_on_body_link_surface
         while not done:
-            x, y, z, yaw = place_fn(obj, self.body, self.link, PLACEMENT_ONLY=True, max_trial=max_trial, verbose=verbose)
+            result = place_fn(obj, self.body, self.link, PLACEMENT_ONLY=True, max_trial=max_trial, verbose=verbose)
+            if result is None:
+                return obj
+            x, y, z, yaw = result
             body_pose = Pose(point=Point(x=x, y=y, z=z), euler=Euler(yaw=yaw))
             set_pose(obj, body_pose)
             coo = collided(obj, obstacles, tag='place_obj', world=world, verbose=False)

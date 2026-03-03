@@ -465,7 +465,7 @@ def generate_problem_pddl(world, facts, goals, world_name='lisdf', domain_name='
 
     ########################################################
 
-    if goals[0] == 'and':
+    if goals and goals[0] == 'and':
         goals = [list(n) for n in goals[1:]]
     goal_pddl = '\n\t'.join([get_pddl_from_list(g, world) for g in sorted(goals)]).lower()
 

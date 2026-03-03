@@ -1583,6 +1583,17 @@ class World(WorldBase):
                 if controlled is not None:
                     init += [('ControlledBy', controlled, body)]
 
+        ## ---- joint-to-space relationships (JointOfSpace predicate) -------------
+        ## for each space (body_id, None, link), link all joints (body_id, joint_id)
+        ## belonging to the same parent body so the planner knows which doors guard it
+        for space in spaces:
+            if not isinstance(space, tuple):
+                continue
+            parent_body_id = space[0]
+            for joint in all_joints:
+                if joint[0] == parent_body_id:
+                    init += [('JointOfSpace', joint, space)]
+
         ## ---- surfaces & spaces -------------
         supporter_poses = {}
         if use_rel_pose:

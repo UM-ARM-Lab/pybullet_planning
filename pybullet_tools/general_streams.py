@@ -1047,6 +1047,10 @@ def get_cfree_approach_pose_test(problem, collisions=True):
     def test(b1, p1, g1, b2, p2):
         if not collisions or (b1 == b2) or b2 in ['@world']:
             return True
+        ## if any pose/grasp is an optimistic placeholder (UniqueOptValue), it has no assign()/value —
+        ## return True (optimistically collision-free) rather than crash
+        if not hasattr(p1, 'assign') or not hasattr(p2, 'assign') or not hasattr(g1, 'value'):
+            return True
         p2.assign()
         bb2 = b2[0] if isinstance(b2, tuple) else b2
         result = True
@@ -1063,6 +1067,10 @@ def get_cfree_pose_pose_test(problem, collisions=True, visualize=False, **kwargs
     ignored_pairs = problem.ignored_pairs
     def test(b1, p1, b2, p2, fluents=[]):
         if not collisions or (b1 == b2) or b2 in ['@world'] or (b1, b2) in ignored_pairs:
+            return True
+        ## if any pose is an optimistic placeholder (UniqueOptValue), it has no assign() —
+        ## return True (optimistically collision-free) rather than crash
+        if not hasattr(p1, 'assign') or not hasattr(p2, 'assign'):
             return True
         if fluents:
             process_motion_fluents(fluents, robot)

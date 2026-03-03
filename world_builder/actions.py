@@ -850,11 +850,14 @@ def get_primitive_actions(action, world, teleport=False, simulate=False, verbose
             return [t.commands[0]]  ## Commands class has function .control()
 
         if isinstance(t, str):
-            if '=t(4' in t:
+            ## string repr of a trajectory (e.g. 'c123=t(4, 30)') — used in abstract/teleport plans
+            if '=t(3' in t or '=t(4' in t:  ## 3-DoF (base) or 4-DoF (base+torso) → MoveBaseAction
                 return [MoveBaseAction(None)]
-            if '=t(7' in t:
+            if '=t(7' in t:  ## 7-DoF arm trajectory → MoveArmAction
                 return [MoveArmAction(None)]
-            return Trajectory([])
+            ## unrecognised string format — return empty list rather than Trajectory
+            # return Trajectory([])
+            return []
         world.remove_handles()
 
         ## get the confs
@@ -892,6 +895,9 @@ def get_primitive_actions(action, world, teleport=False, simulate=False, verbose
 
         else:
             print('\n\nactions.get_primitive_actions | whats this traj', t)
+            ## return t would be a raw Trajectory — return [] so plan concatenation doesn't crash
+            # return t
+            t = []
 
         return t
 

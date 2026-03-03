@@ -112,6 +112,8 @@
     (ApproachObstacle ?o ?p ?g ?o2)
     (ATrajObstacle ?t ?o)
 
+    (JointOfSpace ?j ?r)  ;; joint ?j must be open to access space ?r
+
     (Debug1)
     (Debug2)
     (Debug3)
@@ -159,6 +161,8 @@
                        ; (not (UnsafeOTraj ?o ?g ?t))
                        ; (not (CanMove))
                        (not (Picked ?o))
+                       (forall (?r) (imply (Contained ?o ?p ?r)
+                           (forall (?j) (imply (JointOfSpace ?j ?r) (OpenedJoint ?j)))))
                        )
     :effect (and (AtGrasp ?a ?o ?g) (CanMove) (Picked ?o)
                  (not (AtPose ?o ?p)) (not (HandEmpty ?a))

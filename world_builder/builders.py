@@ -5,13 +5,18 @@ import os
 
 import pybullet as p
 from world_builder.world import World
-from world_builder.entities import Object, Surface, Movable, Supporter
+# from world_builder.entities import Object, Surface, Movable, Supporter
+from world_builder.entities import Object, Surface, Movable, Supporter, Floor, Space
 from world_builder.loaders import load_floor_plan, load_experiment_objects
+# from world_builder.loaders_partnet_kitchen import load_random_mini_kitchen_counter, \
+#     load_another_table, load_another_fridge_food, random_set_doors, ensure_robot_cfree, load_kitchen_mini_scene, \
+#     sample_full_kitchen
 from world_builder.loaders_partnet_kitchen import load_random_mini_kitchen_counter, \
     load_another_table, load_another_fridge_food, random_set_doors, ensure_robot_cfree, load_kitchen_mini_scene, \
-    sample_full_kitchen
+    sample_full_kitchen, load_storage_mechanism
 from world_builder.loaders_nvidia_kitchen import load_cabinet_test_scene
-from world_builder.world_utils import get_domain_constants
+# from world_builder.world_utils import get_domain_constants
+from world_builder.world_utils import get_domain_constants, load_asset, FLOOR_HEIGHT
 
 from robot_builder.robot_builders import get_robot_builder, create_gripper_robot, create_pr2_robot
 
@@ -102,7 +107,7 @@ def save_world_problem(world, goal, config, save_lisdf=True, save_problem=True):
     return out_dir
 
 
-def test_exist_omelette(world, w=.5, h=.9, mass=1):
+def test_exist_omelette(world, w=.5, h=.9, mass=1, **kwargs):
 
     fridge = world.add_box(
         Supporter(create_box(w, w, h, color=(.75, .75, .75, 1)), name='fridge'),
@@ -280,14 +285,14 @@ def sample_one_fridge_scene(world, movable_category='food', verbose=True, open_d
 
 def sample_one_fridge_goal(world, movable_category='food'):
     cabbage = world.cat_to_bodies(movable_category)[0]  ## world.name_to_body('cabbage')
-    fridge = world.name_to_body('fridgestorage')
+    fridge = world.cat_to_bodies('space')[0]
     counter = world.name_to_body('counter')
 
     arm = world.robot.arms[0]
     goal_candidates = [
         [('Holding', arm, cabbage)],
-        # [('On', cabbage, counter)],
-        # [('In', cabbage, fridge)],
+        [('On', cabbage, counter)],
+        [('In', cabbage, fridge)],
     ]
     return random.choice(goal_candidates)
 
@@ -585,3 +590,69 @@ def sample_kitchen_full_goal(world, movable_categories=['edible', 'bottle'],
 
     return goals
 
+
+##########################################################################################
+
+
+def build_omelette_scene(world, verbose=True, **kwargs):
+    """
+    Omelette ingredient retrieval scene:
+      - CabinetLower on the floor  -> contains salter + plate
+      - MiniFridge on the floor    -> contains egg + veggie
+      - KitchenCounter             -> destination surface (robot places items here)
+    Goal is empty for now; used to verify the scene loads correctly.
+    """
+    world.set_skip_joints()
+    world.robot.randomly_spawn()
+
+    # ---- floor ----
+    w, l = 6, 6
+    floor = world.add_object(
+        Floor(create_box(w=w, l=l, h=FLOOR_HEIGHT, color=TAN, collision=True)),
+        Pose(point=Point(x=w/2, y=l/2, z=-2 * FLOOR_HEIGHT)))
+
+    # ---- counter (destination surface, center of scene) ----
+    counter = world.add_object(
+        Object(load_asset('KitchenCounter', x=w/2, y=l/2, yaw=math.pi,
+                          floor=floor, random_instance=True, verbose=verbose),
+               category='supporter', name='counter'))
+
+    # ---- CabinetLower (left side of scene) with salter + plate ----
+    cabinet = world.add_object(
+        Object(load_asset('CabinetLower', x=0.8, y=l/2, yaw=0,
+                          floor=floor, random_instance=True, verbose=verbose),
+               name='cabinet'))
+    cabinet_doors, cabinet_space = load_storage_mechanism(world, cabinet)
+    salter = cabinet_space.place_new_obj('salter', category='salter', random_instance=True)
+    plate  = cabinet_space.place_new_obj('plate',  category='plate',  random_instance=True)
+
+    # ---- MiniFridge (right side of scene) with egg + veggie ----
+    fridge = world.add_object(
+        Object(load_asset('MiniFridge', x=5.2, y=l/2, yaw=math.pi,
+                          floor=floor, random_instance=True, verbose=verbose),
+               name='minifridge'))
+    fridge_doors, fridge_space = load_storage_mechanism(world, fridge)
+    egg    = fridge_space.place_new_obj('egg',          category='egg',   random_instance=True)
+    veggie = fridge_space.place_new_obj('veggiecabbage', category='veggie', random_instance=True)
+
+    # ---- camera ----
+    set_camera_pose(camera_point=[3, -1, 3.5], target_point=[3, 3, 1])
+
+    ensure_robot_cfree(world, verbose=verbose)
+
+    if verbose:
+        print(f'[build_omelette_scene] cabinet={cabinet.name}, '
+              f'fridge={fridge.name}, counter={counter.name}')
+        print(f'  salter={salter.name}, plate={plate.name}, '
+              f'egg={egg.name}, veggie={veggie.name}')
+
+
+    arm = world.robot.arms[0]
+#     goal_candidates = [
+#     [('On', egg.body,   counter.body)],
+#     [('On', veggie.body, counter.body)],
+#     [('Holding', arm, egg.body)],
+#     [('Holding', arm, veggie.body)],
+# ]
+
+    return [('OpenedJoint', next(iter(fridge_doors)))]

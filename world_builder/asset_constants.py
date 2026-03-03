@@ -335,4 +335,5 @@ DONT_LOAD = [
     '46744', ## cabinet upper
     # '102379',  ## has an extra sink base
     # 'veggiezucchini', ## temporarily
+    '14' ## faucet
 ]

@@ -3,16 +3,16 @@ seed: null
 verbose: true
 
 ## pybullet related
-viewer: true
-lock: true
-simulate: false
-teleport: false
-drive: true
-cfree: false
-time_step: 5e-3
-camera: true
-segment: false
-monitoring: false
+sim:
+  viewer: true
+  lock: true
+  simulate: false
+  drive: true
+  time_step: 0.005
+  camera: true
+  segment: false
+  monitoring: false
+  skip_prompt: false
 
 ## data collection mode
 parallel: false
@@ -70,3 +70,15 @@ planner:
   diverse: false
   downward_time: 1
   dataset: false
+  visualize: false
+
+## planning stream related
+streams:
+  debug: false
+  cfree: false
+  teleport: false
+  movable_collisions: true
+  base_collisions: true
+  top_grasp_tolerance: 0.8
+  ir_max_attempts: 15
+  use_all_grasps: false

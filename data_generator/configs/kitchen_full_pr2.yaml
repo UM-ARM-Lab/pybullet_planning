@@ -26,21 +26,34 @@ sim:
 
 robot:
   robot_name: 'pr2'
+  
   builder_name: 'build_robot_from_args'
   builder_kwargs:
     ## x, y, z joint limits for base motion planning
+    # custom_limits: [[0, 0, 0], [6, 6, 2]]
     custom_limits: [[0, -4, -0.5], [3, 8, 3]]
+
     initial_xy: [2, 3]
+    spawn_range: [[4.2, 2, 0.5], [5, 3.5, 1.9]]
 
 
 world:
   ## method 1: use pre-specified builder inside world_builder/builders,
   ##         followed by builder specific arguments
   builder_name: 'test_kitchen_full'
+  # builder_name: 'test_fridge_table'
   builder_kwargs:
     movable_categories: ['edible']
     goal_predicates: ['openedjoint', 'holding', 'on', 'in']
     verbose: false
+
+
+  # builder_name: 'test_one_fridge' 
+  # builder_kwargs:
+  #   movable_category: 'food'
+  # builder_kwargs: {}
+    # goal_predicates: ['openedjoint', 'holding', 'on', 'in']
+    # verbose: false
 
 
 data:
@@ -67,7 +80,7 @@ data:
 ## configuration for PDDLStream
 planner:
   visualize: false
-  timeout: 300
+  timeout: 500
   domain_pddl: 'pddl_domains/pr2_domain_pigi.pddl'
   stream_pddl: 'pddl_domains/pr2_stream_pigi.pddl'
   downward_time: 1
@@ -81,7 +94,7 @@ planner:
 streams:
   debug: false
   cfree: false
-  teleport: false
+  teleport: true
   movable_collisions: true
   base_collisions: true
   top_grasp_tolerance: 0.8

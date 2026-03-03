@@ -57,6 +57,12 @@
     :outputs (?p2)
     :certified (and (Position ?o ?p2) (IsOpenedPosition ?o ?p2) (IsSampledPosition ?o ?p1 ?p2))
   )
+  (:stream get-joint-position-closed
+    :inputs (?o ?p1)
+    :domain (and (Joint ?o) (Position ?o ?p1) (IsOpenedPosition ?o ?p1))
+    :outputs (?p2)
+    :certified (and (Position ?o ?p2) (IsClosedPosition ?o ?p2) (IsSampledPosition ?o ?p1 ?p2))
+  )
 
     (:stream sample-handle-grasp
       :inputs (?o)
@@ -66,7 +72,8 @@
     )
     (:stream inverse-kinematics-grasp-handle
       :inputs (?a ?o ?p ?g)
-      :domain (and (Controllable ?a) (Position ?o ?p) (HandleGrasp ?o ?g) (IsClosedPosition ?o ?p))
+      ;; removed (IsClosedPosition ?o ?p) — allow grasping at open position too (for door closing)
+      :domain (and (Controllable ?a) (Position ?o ?p) (HandleGrasp ?o ?g))
       :outputs (?q ?aq ?t)
       :certified (and (BConf ?q) (AConf ?a ?aq) (ATraj ?t)
                       (GraspHandle ?a ?o ?p ?g ?q ?aq)
@@ -74,7 +81,8 @@
     )
     (:stream inverse-kinematics-ungrasp-handle
       :inputs (?a ?o ?p ?g ?q ?aq1)
-      :domain (and (UngraspHandle ?a ?o ?p ?g ?q ?aq1) (IsOpenedPosition ?o ?p))
+      ;; removed (IsOpenedPosition ?o ?p) — allow ungrasping at closed position too (for door closing)
+      :domain (and (UngraspHandle ?a ?o ?p ?g ?q ?aq1))
       :outputs (?aq2 ?t)
       :certified (and (AConf ?a ?aq2) (ATraj ?t)
                       (KinUngraspHandle ?a ?o ?p ?g ?q ?aq1 ?aq2 ?t))

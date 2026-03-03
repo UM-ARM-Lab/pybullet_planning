@@ -237,6 +237,10 @@ class PDDLStreamAgent(MotionAgent):
 
                 self.step_count += 1
                 commands = get_primitive_actions(action, self.world, teleport=SAVE_TIME)
+                ## get_primitive_actions should return a list, but guard against a raw
+                ## Trajectory being returned (e.g. from an unrecognised DoF in get_traj)
+                if not isinstance(commands, list):
+                    commands = list(commands) if hasattr(commands, '__iter__') else []
                 self.plan = commands + self.plan
                 self.plan_len += 1
                 return self.process_plan(observation)

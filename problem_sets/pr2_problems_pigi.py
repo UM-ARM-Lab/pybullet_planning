@@ -1,4 +1,6 @@
-from world_builder.loaders_partnet_kitchen import *
+# from world_builder.loaders_partnet_kitchen import *
+from world_builder.loaders_partnet_kitchen_test_disha import *
+
 from world_builder.actions import pull_actions, pick_place_actions
 
 from robot_builder.robot_builders import build_robot_from_args
@@ -28,7 +30,8 @@ def test_full_kitchen(args, **kwargs):
         world.set_skip_joints()
         world.set_learned_pose_list_gen(check_kitchen_placement)
 
-        case = random.choice(world_builder_args['goal_variations'])
+        # case = random.choice(world_builder_args['goal_variations'])
+        case = 5
         world.note = case
 
         movables, counters = sample_full_kitchen(world, pause=False, reachability_check=False,
@@ -36,6 +39,8 @@ def test_full_kitchen(args, **kwargs):
 
         objects = []
         skeleton = []
+
+        # goals, skeleton, objects = sample_full_kitchen_goal_pot_to_counter(world)
 
         if case == 0:
             goals = sample_full_kitchen_goal_single_pick_or_pull(world, movables)
@@ -48,6 +53,9 @@ def test_full_kitchen(args, **kwargs):
 
         elif case in [4, 41]:
             goals, skeleton, objects = sample_full_kitchen_goal_pot_to_counter(world)
+
+        elif case == 5: 
+            goals, skeleton, objects = gather_ingredients_to_counter(world, movables, counters)
 
         elif case in [551, 552, 553, 554, 555]:
             goals, skeleton, objects = sample_full_kitchen_goal_demo(world, counters)
@@ -402,6 +410,99 @@ def sample_full_kitchen_goal_pot_to_counter(world):
 
 
 ########################################################################################
+
+def gather_ingredients_to_counter(world, movables, counters):
+    objects = []
+    skeleton = []
+    case = world.note
+    arm = world.robot.arms[0]
+
+    lid = world.name_to_object('braiserlid')
+    world.remove_object(lid)
+
+    ovencounter = world.name_to_body('ovencounter')
+    world.add_to_cat(ovencounter, 'supporter')
+
+    cabinettop = world.name_to_object('cabinettop')
+    cabinettop_doors = cabinettop.doors
+    cabinettop_space = world.name_to_object('cabinettop::storage')
+    world.open_doors_drawers(cabinettop, hide_door=True)  ## , extent=1.5)
+
+    ## always move braiserbody into the overhead cabinet — keeps it out of the robot's workspace
+    ## (even when the pan-to-burner goal is inactive, leaving it on the ovencounter blocks arm paths)
+    braiserbody = world.name_to_object('braiserbody')
+    cabinettop_space.place_obj(braiserbody)
+    braiserbody.adjust_pose(yaw=PI / 2)
+    if isinstance(world.robot, PR2Robot):
+        dx = cabinettop_space.aabb().upper[0] - braiserbody.aabb().upper[0] - 0.05
+        braiserbody.adjust_pose(dx=dx, dz=0.05)
+        world.add_highlighter(braiserbody)
+        if collided(braiserbody.body, [cabinettop], articulated=False, world=world, verbose=True, min_num_pts=0):
+            print(f'braiserbody !!! object collided with cabinettop')
+
+    ## move all food items from the minifridge to a counter (cabbage + egg)
+    fridge_storage = world.name_to_object('minifridge::storage')
+    fridge_items = [o for o in world.cat_to_objects('food')
+                    if o.supporting_surface == fridge_storage]
+    for item in fridge_items:
+        world.add_to_cat(item.body, 'movable')
+    target_counter = world.name_to_body('counter#1')
+    ## clear any edible objects on the target counter — they block sample-pose for placements
+    for obj in list(world.cat_to_objects('edible')):
+        surf = getattr(obj, 'supporting_surface', None)
+        if surf is not None and getattr(surf, 'body', None) == target_counter:
+            world.remove_object(obj)
+    minifridge = world.name_to_object('minifridge')
+    minifridge_doors = minifridge.doors
+
+    ## ensure fridge starts closed so the planner can reason about opening it
+    world.close_doors_drawers(minifridge.pybullet_name)
+
+    ## objects: fridge items + fridge structure + braiserbody (pan from overhead cabinet)
+    # objects = fridge_items + [fridge_storage, minifridge] + minifridge_doors + [braiserbody]
+    objects = fridge_items + [fridge_storage, minifridge] + minifridge_doors 
+
+    ## pigi domain uses separate grasp/pull/ungrasp actions (not the combined grasp_pull_ungrasp_handle)
+    pigi_pull_actions = ['grasp_handle', 'pull_handle', 'ungrasp_handle']
+
+    ## skeleton: open door, pick+place each item, then close door
+    skeleton = []
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## open
+    for item in fridge_items:
+        skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
+
+    ## ClosedJoint in goals forces the planner to close the door after picking items out
+    ## (pick precondition still requires OpenedJoint via JointOfSpace, so door must be opened first)
+    goals = [('ClosedJoint', door) for door in minifridge_doors]
+    goals += [('On', item.body, target_counter) for item in fridge_items]
+
+    # ## braiserbody (pan) from overhead cabinet — doors already opened/hidden, no door step needed
+    # skeleton += [(k, arm, braiserbody) for k in pick_place_actions]
+    # goals += [('On', braiserbody.body, ovencounter)]
+
+    ## salter in overhead cabinet — doors already opened/hidden above, no door constraint needed
+    ## (cabinettop joints are excluded from planning, so forall precondition is vacuously satisfied)
+ 
+ 
+    cabinet_items = world.cat_to_objects('salter')
+    for item in cabinet_items:
+        world.add_to_cat(item.body, 'movable')
+    objects += cabinet_items
+    for item in cabinet_items:
+        skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    goals += [('On', item.body, target_counter) for item in cabinet_items]
+
+    set_camera_target_body(cabinettop, dx=1, dy=0, dz=1.4)
+
+
+    return goals, skeleton, objects
+
+
+#########################################################################################3
+
 
 
 def test_kitchen_dinner(args, **kwargs):
