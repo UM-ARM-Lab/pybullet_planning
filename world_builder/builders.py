@@ -633,7 +633,7 @@ def build_omelette_scene(world, verbose=True, **kwargs):
                name='minifridge'))
     fridge_doors, fridge_space = load_storage_mechanism(world, fridge)
     egg    = fridge_space.place_new_obj('egg',          category='egg',   random_instance=True)
-    veggie = fridge_space.place_new_obj('veggiecabbage', category='veggie', random_instance=True)
+    # veggie = fridge_space.place_new_obj('veggiecabbage', category='veggie', random_instance=True)
 
     # ---- camera ----
     set_camera_pose(camera_point=[3, -1, 3.5], target_point=[3, 3, 1])

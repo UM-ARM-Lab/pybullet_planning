@@ -100,3 +100,4 @@ streams:
   top_grasp_tolerance: 0.8
   ir_max_attempts: 15
   use_all_grasps: false
+  pull_collisions: false         ### added Disha

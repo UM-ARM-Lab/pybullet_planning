@@ -225,11 +225,12 @@ class PDDLStreamAgent(MotionAgent):
                 return action
 
             name, args = action
-            incomplete_action = '?t' in args
+            incomplete_action = '?t' in args or any(isinstance(a, str) and a.startswith('#') for a in args)
 
             ## may be an abstract action or move_base action that hasn't been solved
             if '--no-' in name or incomplete_action:
-                self.refine_plan(action, observation)
+                self.replan(observation)
+                return self.process_plan(observation)
             else:
                 if self.env_execution is not None and name in self.env_execution.domain.operators:
                     self._update_state(action)

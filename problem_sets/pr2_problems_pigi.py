@@ -31,7 +31,7 @@ def test_full_kitchen(args, **kwargs):
         world.set_learned_pose_list_gen(check_kitchen_placement)
 
         # case = random.choice(world_builder_args['goal_variations'])
-        case = 5
+        case = 7
         world.note = case
 
         movables, counters = sample_full_kitchen(world, pause=False, reachability_check=False,
@@ -56,6 +56,13 @@ def test_full_kitchen(args, **kwargs):
 
         elif case == 5: 
             goals, skeleton, objects = gather_ingredients_to_counter(world, movables, counters)
+
+        
+        elif case == 6:
+            goals, skeleton, objects = gather_ingredients_to_counter_modified(world, movables, counters)
+
+        elif case == 7:
+            goals, skeleton, objects = fridge_item_to_counter(world, movables, counters)
 
         elif case in [551, 552, 553, 554, 555]:
             goals, skeleton, objects = sample_full_kitchen_goal_demo(world, counters)
@@ -476,8 +483,8 @@ def gather_ingredients_to_counter(world, movables, counters):
 
     ## ClosedJoint in goals forces the planner to close the door after picking items out
     ## (pick precondition still requires OpenedJoint via JointOfSpace, so door must be opened first)
-    goals = [('ClosedJoint', door) for door in minifridge_doors]
-    goals += [('On', item.body, target_counter) for item in fridge_items]
+    # goals = [('ClosedJoint', door) for door in minifridge_doors]
+    goals = [('On', item.body, target_counter) for item in fridge_items]
 
     # ## braiserbody (pan) from overhead cabinet — doors already opened/hidden, no door step needed
     # skeleton += [(k, arm, braiserbody) for k in pick_place_actions]
@@ -487,13 +494,13 @@ def gather_ingredients_to_counter(world, movables, counters):
     ## (cabinettop joints are excluded from planning, so forall precondition is vacuously satisfied)
  
  
-    cabinet_items = world.cat_to_objects('salter')
-    for item in cabinet_items:
-        world.add_to_cat(item.body, 'movable')
-    objects += cabinet_items
-    for item in cabinet_items:
-        skeleton += [(k, arm, item.body) for k in pick_place_actions]
-    goals += [('On', item.body, target_counter) for item in cabinet_items]
+    # cabinet_items = world.cat_to_objects('salter')
+    # for item in cabinet_items:
+    #     world.add_to_cat(item.body, 'movable')
+    # objects += cabinet_items
+    # for item in cabinet_items:
+    #     skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    # goals += [('On', item.body, target_counter) for item in cabinet_items]
 
     set_camera_target_body(cabinettop, dx=1, dy=0, dz=1.4)
 
@@ -501,8 +508,192 @@ def gather_ingredients_to_counter(world, movables, counters):
     return goals, skeleton, objects
 
 
-#########################################################################################3
+def gather_ingredients_to_counter_modified(world, movables, counters):
+    objects = []
+    skeleton = []
+    case = world.note
+    arm = world.robot.arms[0]
 
+    lid = world.name_to_object('braiserlid')
+    world.remove_object(lid)
+
+
+    ovencounter = world.name_to_body('ovencounter')
+    world.add_to_cat(ovencounter, 'supporter')
+
+    cabinettop = world.name_to_object('cabinettop')
+    if cabinettop is None:
+        ## overhead cabinet was not placed (scene gen failure) — remove braiserbody from planning
+        braiserbody = world.name_to_object('braiserbody')
+        if braiserbody is not None:
+            world.remove_bodies_from_planning(exceptions=[braiserbody.body])
+    else:
+        cabinettop_doors = cabinettop.doors
+        cabinettop_space = world.name_to_object('cabinettop::storage')
+        world.open_doors_drawers(cabinettop, hide_door=True)  ## , extent=(1.5)
+
+        ## always move braiserbody into the overhead cabinet — keeps it out of the robot's workspace
+        ## (even when the pan-to-burner goal is inactive, leaving it on the ovencounter blocks arm paths)
+        braiserbody = world.name_to_object('braiserbody')
+        cabinettop_space.place_obj(braiserbody)
+        braiserbody.adjust_pose(yaw=PI / 2)
+        if isinstance(world.robot, PR2Robot):
+            dx = cabinettop_space.aabb().upper[0] - braiserbody.aabb().upper[0] - 0.05
+            braiserbody.adjust_pose(dx=dx, dz=0.05)
+            world.add_highlighter(braiserbody)
+            if collided(braiserbody.body, [cabinettop], articulated=False, world=world, verbose=True, min_num_pts=0):
+                print(f'braiserbody !!! object collided with cabinettop')
+
+    ## move all food items from the minifridge to a counter (cabbage + egg)
+    fridge_storage = world.name_to_object('minifridge::storage')
+    fridge_items = [o for o in world.cat_to_objects('food')
+                    if o.supporting_surface == fridge_storage]
+    for item in fridge_items:
+        world.add_to_cat(item.body, 'movable')
+    target_counter = world.name_to_body('counter#1')
+    ## clear any edible objects on the target counter — they block sample-pose for placements
+    for obj in list(world.cat_to_objects('edible')):
+        surf = getattr(obj, 'supporting_surface', None)
+        if surf is not None and getattr(surf, 'body', None) == target_counter:
+            world.remove_object(obj)
+    minifridge = world.name_to_object('minifridge')
+    minifridge_doors = minifridge.doors
+
+    ## ensure fridge starts closed so the planner can reason about opening it
+    world.close_doors_drawers(minifridge.pybullet_name)
+
+    ## objects: fridge items + fridge structure + braiserbody (pan from overhead cabinet)
+    # objects = fridge_items + [fridge_storage, minifridge] + minifridge_doors + [braiserbody]
+    objects = fridge_items + [fridge_storage, minifridge] + minifridge_doors 
+
+    ## pigi domain uses separate grasp/pull/ungrasp actions (not the combined grasp_pull_ungrasp_handle)
+    pigi_pull_actions = ['grasp_handle', 'pull_handle', 'ungrasp_handle']
+
+    ## skeleton: open door, pick+place each item, then close door
+    skeleton = []
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## open
+    for item in fridge_items:
+        skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
+
+    ## ClosedJoint in goals forces the planner to close the door after picking items out
+    ## (pick precondition still requires OpenedJoint via JointOfSpace, so door must be opened first)
+    # goals = [('ClosedJoint', door) for door in minifridge_doors]
+    goals = [('On', item.body, target_counter) for item in fridge_items]
+
+    # ## braiserbody (pan) from overhead cabinet — doors already opened/hidden, no door step needed
+    # skeleton += [(k, arm, braiserbody) for k in pick_place_actions]
+    # goals += [('On', braiserbody.body, ovencounter)]
+
+    ## salter in overhead cabinet — doors already opened/hidden above, no door constraint needed
+    ## (cabinettop joints are excluded from planning, so forall precondition is vacuously satisfied)
+ 
+ 
+    # cabinet_items = world.cat_to_objects('salter')
+    # for item in cabinet_items:
+    #     world.add_to_cat(item.body, 'movable')
+    # objects += cabinet_items
+    # for item in cabinet_items:
+    #     skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    # goals += [('On', item.body, target_counter) for item in cabinet_items]
+
+    if cabinettop is not None:
+        set_camera_target_body(cabinettop, dx=1, dy=0, dz=1.4)
+
+    return goals, skeleton, objects
+
+
+#########################################################################################
+
+
+def fridge_item_to_counter(world, movables, counters):
+    """
+    case 7: move a single VeggieCabbage from the minifridge to counter#1.
+    Minimal setup — no braiserbody/cabinettop manipulation.
+    """
+    objects = []
+    skeleton = []
+    case = world.note
+    arm = world.robot.arms[0]
+
+    lid = world.name_to_object('braiserlid')
+    world.remove_object(lid)
+
+    ovencounter = world.name_to_body('ovencounter')
+    world.add_to_cat(ovencounter, 'supporter')
+
+    cabinettop = world.name_to_object('cabinettop')
+    cabinettop_doors = cabinettop.doors
+    cabinettop_space = world.name_to_object('cabinettop::storage')
+    world.open_doors_drawers(cabinettop, hide_door=True)  ## , extent=1.5)
+
+    ## always move braiserbody into the overhead cabinet — keeps it out of the robot's workspace
+    ## (even when the pan-to-burner goal is inactive, leaving it on the ovencounter blocks arm paths)
+    braiserbody = world.name_to_object('braiserbody')
+    cabinettop_space.place_obj(braiserbody)
+    braiserbody.adjust_pose(yaw=PI / 2)
+    if isinstance(world.robot, PR2Robot):
+        dx = cabinettop_space.aabb().upper[0] - braiserbody.aabb().upper[0] - 0.05
+        braiserbody.adjust_pose(dx=dx, dz=0.05)
+        world.add_highlighter(braiserbody)
+        if collided(braiserbody.body, [cabinettop], articulated=False, world=world, verbose=True, min_num_pts=0):
+            print(f'braiserbody !!! object collided with cabinettop')
+
+
+
+    arm = world.robot.arms[0]
+
+    fridge_storage = world.name_to_object('minifridge::storage')
+    fridge_items = [o for o in world.cat_to_objects('food')
+                    if o.supporting_surface == fridge_storage]
+
+    # ## DIAGNOSTIC: uncomment to test with cabbage only
+    # cabbage = next((o for o in fridge_items if 'egg' in o.name.lower()), fridge_items[0])
+    # for extra in fridge_items:
+    #     if extra is not cabbage:
+    #         world.remove_object(extra)
+    # fridge_items = [cabbage]
+
+    for item in fridge_items:
+        world.add_to_cat(item.body, 'movable')
+
+    ## target placement surface
+    target_counter = world.name_to_body('counter#1')
+
+
+    ## remove any objects already on counter#1 — load_movables places random food there at
+    ## scene start, which exhausts the placement sampler's collision budget for our fridge items
+    for obj in list(world.cat_to_objects('edible')):
+        surf = getattr(obj, 'supporting_surface', None)
+        if surf is not None and getattr(surf, 'body', None) == target_counter:
+            world.remove_object(obj)
+
+
+    ## fridge starts closed so the planner must reason about opening it
+    minifridge = world.name_to_object('minifridge')
+    minifridge_doors = minifridge.doors
+    world.close_doors_drawers(minifridge.pybullet_name)
+
+    ## objects that must survive remove_bodies_from_planning
+    objects = fridge_items + [fridge_storage, minifridge] + minifridge_doors
+
+    ## pigi domain uses separate grasp/pull/ungrasp (not the combined action)
+    pigi_pull_actions = ['grasp_handle', 'pull_handle', 'ungrasp_handle']
+
+    skeleton = []
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## open
+    for item in fridge_items:
+        skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    # for door in minifridge_doors:
+    #     skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
+
+    goals = [('On', item.body, target_counter) for item in fridge_items]
+    # goals += [('ClosedJoint', door) for door in minifridge_doors]
+
+    return goals, skeleton, objects
 
 
 def test_kitchen_dinner(args, **kwargs):

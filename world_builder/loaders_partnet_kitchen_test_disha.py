@@ -961,7 +961,7 @@ def load_full_kitchen_upper_cabinets(world, counters, x_min, y_min, y_max, dz=0.
                                      obstacles=[], verbose=False, random_scale=1.0):
     cabinets, shelves = [], []
     cabi_type = 'CabinetTop' if random.random() < 0.5 else 'CabinetUpper'
-    if world.note in [1, 21, 31, 11, 4, 41, 991, 551, 552]:
+    if world.note in [1, 21, 31, 11, 4, 41, 6, 991, 551, 552]:
         cabi_type = 'CabinetTop'
     colors = {
         '45526': HEX_to_RGB('#EDC580'),
