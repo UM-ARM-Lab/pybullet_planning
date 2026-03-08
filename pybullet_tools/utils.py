@@ -3111,9 +3111,8 @@ def get_collision_data(body, link=BASE_LINK):
         return [CollisionShapeData(*tup) for tup in data]
     except:
         print(traceback.format_exc())
-        print(f'utils.get_collision_data({body}) | Error receiving collision info from pybullet. Just run again :)')
-        sys.exit()
-    return []
+        print(f'utils.get_collision_data({body}) | body may have been removed from PyBullet; skipping collision check')
+        return []
 
 def can_collide(body, link=BASE_LINK, **kwargs):
     return len(get_collision_data(body, link=link, **kwargs)) != 0

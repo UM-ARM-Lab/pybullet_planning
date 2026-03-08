@@ -687,11 +687,11 @@ def fridge_item_to_counter(world, movables, counters):
         skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## open
     for item in fridge_items:
         skeleton += [(k, arm, item.body) for k in pick_place_actions]
-    # for door in minifridge_doors:
-    #     skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
+    for door in minifridge_doors:
+        skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
 
     goals = [('On', item.body, target_counter) for item in fridge_items]
-    # goals += [('ClosedJoint', door) for door in minifridge_doors]
+    goals += [('ClosedJoint', door) for door in minifridge_doors]
 
     return goals, skeleton, objects
 
