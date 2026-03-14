@@ -13,10 +13,10 @@ from world_builder.loaders import load_floor_plan, load_experiment_objects
 #     sample_full_kitchen
 from world_builder.loaders_partnet_kitchen import load_random_mini_kitchen_counter, \
     load_another_table, load_another_fridge_food, random_set_doors, ensure_robot_cfree, load_kitchen_mini_scene, \
-    sample_full_kitchen, load_storage_mechanism
+    sample_full_kitchen, load_storage_mechanism, load_salter_in_drawer
 from world_builder.loaders_nvidia_kitchen import load_cabinet_test_scene
 # from world_builder.world_utils import get_domain_constants
-from world_builder.world_utils import get_domain_constants, load_asset, FLOOR_HEIGHT
+from world_builder.world_utils import get_domain_constants, load_asset, FLOOR_HEIGHT, get_partnet_spaces
 
 from robot_builder.robot_builders import get_robot_builder, create_gripper_robot, create_pr2_robot
 
@@ -546,6 +546,54 @@ def sample_kitchen_full_goal(world, movable_categories=['edible', 'bottle'],
                              goal_predicates=None):
     objects = []
 
+    ## --- goal: pick salter from cabinetlower (door pre-opened, excluded from planning) ---
+    ## The cabinet door is opened visually at load time but NOT added to the planning objects,
+    ## so JointOfSpace is vacuously satisfied and the robot picks the salter directly.
+    ## (CabinetLower/41004 handle is an embedded mesh, not a separate link — no grasp DB entry.)
+ 
+    ## ---------------------------------------------------
+    
+    # salter_candidates = world.cat_to_bodies('salter')
+    # lower_cabinets = world.cat_to_objects('cabinetlower')
+    # if salter_candidates and lower_cabinets:
+    #     salter = salter_candidates[0]
+    #     hand = world.robot.arms[0]
+    #     goals = [('Holding', hand, salter)]
+    #     world.add_to_cat(salter, 'movable')
+    #     world.remove_bodies_from_planning(goals=goals, exceptions=objects)
+    #     return goals
+
+
+    ### ----------------------------------------
+
+    ## --- (disabled) minifridge approach ---
+    # salter_candidates = world.cat_to_bodies('salter')
+    # fridge = world.name_to_object('minifridge')
+    # if salter_candidates and fridge and fridge.doors:
+    #     salter = salter_candidates[0]
+    #     fridge_door = fridge.doors[0]
+    #     objects += [fridge_door]
+    #     hand = world.robot.arms[0]
+    #     goals = [('Holding', hand, salter)]
+    #     world.add_to_cat(salter, 'movable')
+    #     world.remove_bodies_from_planning(goals=goals, exceptions=objects)
+    #     return goals
+
+    ## --- (disabled) pick salter from cabinetlower WITH door opening ---
+    ## CabinetLower/41004 (partnet_10c14b0cb76f87584da5feafe6f1c8fc) has no handle grasp
+    ## data in hand_grasps_PR2Robot.json — sample-handle-grasp returns [] and planning fails.
+    ## To re-enable: add grasp data for the cabinet door link to the DB, then swap back.
+    # if salter_candidates and lower_cabinets and lower_cabinets[0].doors:
+    #     salter = salter_candidates[0]
+    #     cab_door = lower_cabinets[0].doors[0]
+    #     objects += [cab_door]
+    #     hand = world.robot.arms[0]
+    #     goals = [('Holding', hand, salter)]
+    #     world.add_to_cat(salter, 'movable')
+    #     world.remove_bodies_from_planning(goals=goals, exceptions=objects)
+    #     return goals
+
+    ## --- fallback: original logic ---
     movable_candidates = []
     for category in movable_categories:
         movable_candidates += world.cat_to_bodies(category)
@@ -555,7 +603,7 @@ def sample_kitchen_full_goal(world, movable_categories=['edible', 'bottle'],
     fridge = world.name_to_object('minifridge')
     fridge_space = world.name_to_body(f'minifridge::storage')
     fridge_door = fridge.doors[0]
-    # objects += [fridge_door]
+    objects += [fridge_door]
 
     hand = world.robot.arms[0]
     goals_candidates = [
@@ -566,7 +614,8 @@ def sample_kitchen_full_goal(world, movable_categories=['edible', 'bottle'],
     ]
     goals = []
     while len(goals) == 0:
-        goals = random.choice(goals_candidates)
+        # goals = random.choice(goals_candidates)
+        goals = goals_candidates[2]
         if goal_predicates is not None:
             goals = [g for g in goals if g[0].lower() in goal_predicates]
 
@@ -656,3 +705,113 @@ def build_omelette_scene(world, verbose=True, **kwargs):
 # ]
 
     return [('OpenedJoint', next(iter(fridge_doors)))]
+
+
+############################################
+
+
+def test_salter_from_drawer(world, verbose=True, **kwargs):
+    """
+    Scene: 1 destination KitchenCounter + 2 drawer cabinets (KitchenCounter/30238,
+    which has exactly 2 slider drawers + 1 interior space, no door).
+    The salter is randomly placed in one of the two cabinets' interior spaces.
+    Goal: place the salter on the destination counter.
+
+    Analogous to the hitman/indigo drawer setup in test_kitchen_drawers (problems_nvidia.py),
+    but as a standalone minimal scene.
+    """
+    world.set_skip_joints()
+    if hasattr(world.robot, 'spawn_range'):
+        world.robot.randomly_spawn()
+
+    scene_w, scene_l = 6, 6
+    floor = world.add_object(
+        Floor(create_box(w=scene_w, l=scene_l, h=FLOOR_HEIGHT, color=TAN, collision=True)),
+        Pose(point=Point(x=scene_w/2, y=scene_l/2, z=-2 * FLOOR_HEIGHT)))
+
+    # Destination surface (robot places salter here)
+    counter = world.add_object(
+        Object(load_asset('KitchenCounter', x=scene_w/2, y=scene_l/2, yaw=math.pi,
+                          floor=floor, random_instance=True, verbose=verbose),
+               category='supporter', name='counter'))
+
+    # Two drawer cabinets: KitchenCounter/30238 has 2 slider drawers + furniture_body, no door.
+    # Each cabinet has its own independent interior space.
+    cab1 = world.add_object(
+        Object(load_asset('KitchenCounter', x=0.8, y=scene_l/3, yaw=0,
+                          floor=floor, random_instance='30238', verbose=verbose),
+               name='cabinet1'))
+    cab2 = world.add_object(
+        Object(load_asset('KitchenCounter', x=0.8, y=2*scene_l/3, yaw=0,
+                          floor=floor, random_instance='30238', verbose=verbose),
+               name='cabinet2'))
+
+    # Register drawer joints for both cabinets (set_skip_joints prevents auto-detection).
+    # KitchenCounter/30238: link_0=furniture_body, link_1=slider drawer, link_2=slider drawer.
+    world.get_doors_drawers(cab1.body, skippable=False)
+    world.get_doors_drawers(cab2.body, skippable=False)
+
+    # Create interior spaces (one per cabinet).
+    # get_partnet_spaces finds links with '_body' in name (i.e. furniture_body = link_0).
+    for b, _, link in get_partnet_spaces(cab1.path, cab1.body):
+        space1 = world.add_object(Space(b, link, name='cabinet1::storage'))
+        break
+    for b, _, link in get_partnet_spaces(cab2.path, cab2.body):
+        space2 = world.add_object(Space(b, link, name='cabinet2::storage'))
+        break
+
+    # Salter goes in one of the two drawer cabinets (random 50/50 per generated instance).
+    if random.random() < 0.5:
+        salter = space1.place_new_obj('salter', category='salter', random_instance=True)
+    else:
+        salter = space2.place_new_obj('salter', category='salter', random_instance=True)
+
+    set_camera_pose(camera_point=[3, -1, 3.5], target_point=[3, 3, 1])
+    ensure_robot_cfree(world, verbose=verbose)
+
+    return [('On', salter.body, counter.body)]
+
+
+############################################
+
+
+def test_salter_from_drawers(world, verbose=True, **kwargs):
+    """
+    Same minimal scene as test_salter_from_drawer, but places the salter
+    inside an actual slider drawer link using load_salter_in_drawer.
+
+    The drawer is opened during world setup for placement, then closed so
+    the initial state has the salter hidden inside a closed drawer. The
+    JointOfSpace precondition in the domain forces the planner to open the
+    drawer before it can pick the salter.
+
+    Goal: place the salter on the destination counter.
+    """
+    world.set_skip_joints()
+    if hasattr(world.robot, 'spawn_range'):
+        world.robot.randomly_spawn()
+
+    scene_w, scene_l = 6, 6
+    floor = world.add_object(
+        Floor(create_box(w=scene_w, l=scene_l, h=FLOOR_HEIGHT, color=TAN, collision=True)),
+        Pose(point=Point(x=scene_w/2, y=scene_l/2, z=-2 * FLOOR_HEIGHT)))
+
+    counter = world.add_object(
+        Object(load_asset('KitchenCounter', x=scene_w/2, y=scene_l/2, yaw=math.pi,
+                          floor=floor, random_instance=True, verbose=verbose),
+               category='supporter', name='counter'))
+
+    cab = world.add_object(
+        Object(load_asset('KitchenCounter', x=0.8, y=scene_l/2, yaw=0,
+                          floor=floor, random_instance='30238', verbose=verbose),
+               name='cabinet'))
+
+    # Open the drawer so placement succeeds, then close it so the planner must open it.
+    world.open_doors_drawers(cab.body)
+    drawer_space, salter = load_salter_in_drawer(world, cab, drawer_index=0, name_prefix='cabinet')
+    world.close_all_doors_drawers()
+
+    set_camera_pose(camera_point=[3, -1, 3.5], target_point=[3, 3, 1])
+    ensure_robot_cfree(world, verbose=verbose)
+
+    return [('On', salter.body, counter.body)]

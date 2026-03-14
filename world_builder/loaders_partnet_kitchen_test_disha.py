@@ -14,6 +14,7 @@ from world_builder.loaders import *
 from world_builder.world_utils import get_partnet_doors, \
     get_partnet_spaces, FURNITURE_WHITE, adjust_for_reachability, get_partnet_links_by_type, \
     FURNITURE_YELLOW, FURNITURE_GREY, HEX_to_RGB
+from world_builder.loaders_partnet_kitchen import load_salter_in_drawer
 
 
 ######################################################################################
@@ -1467,16 +1468,35 @@ def sample_full_kitchen(world, verbose=True, pause=True, reachability_check=True
     ## from the robot's post-door-pull position (y≈6.5) — otherwise the 0.9m reach clips the fridge.
     egg.adjust_pose(dz=0.5)
 
-    """ step 7.5: place salter in overhead cabinet (cabinettop::storage) """
-    salter = world.add_object(Movable(
-        load_asset('Salter', x=0, y=0, yaw=random.uniform(-math.pi, math.pi),
-                   floor=floor, random_instance=True),
-        category='salter'
-    ))
-    cabinettop_storage = world.name_to_object('cabinettop::storage')
-    ## clamp_z=True: place_obj fails silently when the cabinet is occupied by braiserbody,
-    ## leaving the salter at floor level (z≈0.05). Force z into the cabinet storage AABB.
-    place_in_cabinet(cabinettop_storage, salter, world=world, clamp_z=True)
+    ## -- old: place salter in overhead cabinet (cabinettop::storage) --
+    # salter = world.add_object(Movable(
+    #     load_asset('Salter', x=0, y=0, yaw=random.uniform(-math.pi, math.pi),
+    #                floor=floor, random_instance=True),
+    #     category='salter'
+    # ))
+    # cabinettop_storage = world.name_to_object('cabinettop::storage')
+    # ## clamp_z=True: place_obj fails silently when the cabinet is occupied by braiserbody,
+    # ## leaving the salter at floor level (z≈0.05). Force z into the cabinet storage AABB.
+    # place_in_cabinet(cabinettop_storage, salter, world=world, clamp_z=True)
+
+    ## -- commented out: place salter in a CabinetLower drawer --
+    # lower_cabinets = world.cat_to_objects('CabinetLower')
+    # drawer_cabinet = lower_cabinets[0] if lower_cabinets else None
+    # if drawer_cabinet is not None:
+    #     _, salter = load_salter_in_drawer(world, drawer_cabinet,
+    #                                       name_prefix=drawer_cabinet.name.lower())
+
+    """ step 7.5 (debug): open first CabinetLower drawer at instantiation to verify slider joints """
+    lower_cabinets = world.cat_to_objects('CabinetLower')
+    drawer_cabinet = lower_cabinets[0] if lower_cabinets else None
+    if drawer_cabinet is not None:
+        _, drawers, _ = world.get_doors_drawers(drawer_cabinet.body, skippable=False)
+        if drawers:
+            b, j = drawers[0]
+            world.open_joint(b, j, extent=1.0)
+            print(f'[debug] opened drawer joint ({b}, {j}) on {drawer_cabinet.name}')
+        else:
+            print(f'[debug] no drawer joints found on {drawer_cabinet.name}')
 
     """ step 8: place movables on counters """
     movables = load_movables(world, counters, shelves, obstacles, x_food_min, reachability_check)

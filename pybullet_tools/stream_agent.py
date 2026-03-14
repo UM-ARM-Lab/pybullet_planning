@@ -554,6 +554,8 @@ def pddlstream_from_state_goal(state, goals, domain_pddl='pr2_kitchen.pddl',
 
     goal = [g for g in goal if not (g[0] == 'not' and g[1][0] == '=')]
 
+    print(f'goal: {goal}')
+
     if problem_dict is not None and 'english_goal' in problem_dict:
         print_goal([AND, [problem_dict['english_goal']]], world=world, print_fn=print_fn)
     else:

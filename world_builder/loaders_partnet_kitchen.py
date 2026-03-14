@@ -37,16 +37,16 @@ def place_in_cabinet(fridgestorage, cabbage, place=True, world=None, learned=Tru
     pose = ((x0, y0, z0), quat0)
     # print(f'loaders.place_in_cabinet from {nice(old_pose)} to {nice(pose)}')
 
-    # ## debug: draw the pose sampling boundary
-    # x_min = get_aabb(b, link=l).upper[0] - get_aabb_extent(get_aabb(cabbage))[0] / 2 - 0.1
-    # x_max = get_aabb(b, link=l).upper[0] - get_aabb_extent(get_aabb(cabbage))[0] / 2 - 0.05
-    # y_min = get_aabb(b, link=l).lower[1] + y_offset
-    # y_max = get_aabb(b, link=l).upper[1] - y_offset
-    # z_min = z0 - get_aabb_extent(get_aabb(cabbage))[2] / 2
-    # z_max = z0 + get_aabb_extent(get_aabb(cabbage))[2] / 2
-    # boundary = AABB(lower=(x_min, y_min, z_min), upper=(x_max, y_max, z_max))
-    # draw_aabb(boundary, color=(1, 0, 0, 1), parent=cabbage)
-    # fridgestorage.world.open_all_doors_drawers(extent=0.5)
+    ## debug: draw the pose sampling boundary
+    x_min = get_aabb(b, link=l).upper[0] - get_aabb_extent(get_aabb(cabbage))[0] / 2 - 0.1
+    x_max = get_aabb(b, link=l).upper[0] - get_aabb_extent(get_aabb(cabbage))[0] / 2 - 0.05
+    y_min = get_aabb(b, link=l).lower[1] + y_offset
+    y_max = get_aabb(b, link=l).upper[1] - y_offset
+    z_min = z0 - get_aabb_extent(get_aabb(cabbage))[2] / 2
+    z_max = z0 + get_aabb_extent(get_aabb(cabbage))[2] / 2
+    boundary = AABB(lower=(x_min, y_min, z_min), upper=(x_max, y_max, z_max))
+    draw_aabb(boundary, color=(1, 0, 0, 1), parent=cabbage)
+    fridgestorage.world.open_all_doors_drawers(extent=0.5)
 
     if place:
         world = fridgestorage.world if world is None else world
@@ -100,7 +100,7 @@ def load_random_mini_kitchen_counter(world, movable_category='food', w=6, l=6, h
     #     if trials <= 0:
     #         sys.exit()
 
-    # world.open_all_doors_drawers()
+    world.open_all_doors_drawers()
     # set_camera_target_body(cabbage, dx=0.4, dy=0, dz=0)
 
     # set_renderer(True)
@@ -1008,6 +1008,7 @@ def load_full_kitchen_upper_cabinets(world, counters, x_min, y_min, y_max, dz=0.
 
     def add_cabinets(selected_counters, obstacles=[], **kwargs):
         color = FURNITURE_WHITE
+        # color = FURNITURE_YELLOW
         blend = []  ## cabinet overflowed to the next counter
         # for num in range(random.choice([1, 2])):
         # Debug: only add one cabinet for now
@@ -1153,6 +1154,9 @@ def load_all_furniture(world, ordering, floor, base, start, color, wall_height,
         if world.note in [555]:
             if category == 'MiniFridge':
                 ins = random.choice(['11709'])  ## two doors
+        if world.note in [8]:
+            if category == 'CabinetLower':
+                ins = '45213'  ## only instance with slider drawers
         return world.add_object(Object(
             load_asset(category, yaw=math.pi, floor=floor, random_instance=ins, verbose=False),
             name=category, category=category))
@@ -1349,6 +1353,29 @@ def load_storage_spaces(world, epsilon=0.0, make_doors_transparent=True, **kwarg
             cabi = world.name_to_object(cabi_type)
             load_storage_mechanism(world, cabi, epsilon=epsilon, **kwargs)
 
+    ## --- OPEN FIRST LOWER-CABINET AND DISHWASHER DOOR (debug) ---
+    # for cat in ['cabinetlower']:  ### dishwasherbox
+    #     objs = world.cat_to_objects(cat)
+    #     if objs:
+    #         load_storage_mechanism(world, objs[0], epsilon=1.0, **kwargs)
+    #         if objs[1]:
+    #             load_storage_mechanism(world, objs[1], epsilon=1.0, **kwargs)
+
+    ## --- CABINETLOWER: place salter inside (door closed), then open door visually ---
+    ## (disabled for baseline verification — re-enable for case 8 salter task)
+    # lower_cabinets = world.cat_to_objects('cabinetlower')
+    # if lower_cabinets:
+    #     _, cab_space = load_storage_mechanism(world, lower_cabinets[0], epsilon=0.0, **kwargs)
+    #     if cab_space is not None:
+    #         cab_space.place_new_obj('salter', category='salter', random_instance=True)
+    #     cab = lower_cabinets[0]
+    #     if cab.doors:
+    #         world.open_joint(cab.doors[0][0], cab.doors[0][1], extent=0.9)
+
+    # ## --- OPEN DISHWASHER DOOR (debug) ---
+    # dishwashers = world.cat_to_objects('dishwasherbox')
+    # if dishwashers:
+    #     load_storage_mechanism(world, dishwashers[0], epsilon=1.0, **kwargs)
 
 def load_movables(world, counters, shelves, obstacles, x_food_min, reachability_check):
     all_counters = {
@@ -1374,6 +1401,24 @@ def load_movables(world, counters, shelves, obstacles, x_food_min, reachability_
         load_counter_movables(world, all_counters, d_x_min=0.3, obstacles=obstacles,
                               reachability_check=reachability_check)
     movables = food_ids + bottle_ids + medicine_ids
+
+    ## load salter into a drawer of a CabinetLower instead of on a shelf
+    ## (disabled: salter is now placed in the cabinet interior via load_storage_spaces)
+    # salter_loaded = False
+    # lower_cabinets = world.cat_to_objects('CabinetLower')
+    # random.shuffle(lower_cabinets)
+    # for cab in lower_cabinets:
+    #     try:
+    #         _, salter = load_salter_in_drawer(world, cab,
+    #                                           name_prefix=cab.name.lower().replace(' ', '_'))
+    #         movables.append(salter)
+    #         salter_loaded = True
+    #         break
+    #     except (ValueError, Exception):
+    #         continue
+    # if not salter_loaded:
+    #     print('load_movables: no CabinetLower with drawers found; salter not loaded')
+
     return movables
 
 
@@ -1664,6 +1709,48 @@ def check_kitchen_placement(world, body, surface, **kwargs):
 
 # def learned_pigi_pose_list_gen(world, body, surfaces, num_samples=30, obstacles=[], verbose=True):
 #
+
+
+######################################################################################
+
+
+def load_salter_in_drawer(world, cabinet, drawer_index=0, name_prefix='cabinet'):
+    """Load a salter into an actual slider drawer of *cabinet*.
+
+    Unlike ``load_storage_mechanism`` which targets the ``furniture_body``
+    interior space, this function targets a ``slider drawer`` link (link_1 or
+    link_2 for KitchenCounter/30238).
+
+    Parameters
+    ----------
+    world      : World
+    cabinet    : Object  – an already-added drawer cabinet (e.g. KitchenCounter/30238)
+    drawer_index : int   – 0 for the first drawer found, 1 for the second, etc.
+    name_prefix  : str   – prefix used for the Space name
+
+    Returns
+    -------
+    (drawer_space, salter) : (Space, Movable)
+    """
+    # Register slider joints so the world knows about them
+    world.get_doors_drawers(cabinet.body, skippable=False)
+
+    # Find all drawer links using partnet semantics
+    drawer_links = get_partnet_links_by_type(cabinet.path, cabinet.body, 'drawer')
+    if not drawer_links:
+        raise ValueError(f'No drawer links found in {cabinet.path}')
+    if drawer_index >= len(drawer_links):
+        raise ValueError(f'drawer_index={drawer_index} out of range; '
+                         f'only {len(drawer_links)} drawer(s) found')
+
+    chosen_link = drawer_links[drawer_index]
+    drawer_space = world.add_object(
+        Space(cabinet.body, chosen_link,
+              name=f'{name_prefix}::drawer{drawer_index}'))
+
+    salter = drawer_space.place_new_obj('salter', category='salter',
+                                        random_instance=True)
+    return drawer_space, salter
 
 
 ######################################################################################
