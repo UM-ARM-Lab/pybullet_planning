@@ -229,8 +229,10 @@ class PDDLStreamAgent(MotionAgent):
 
             ## may be an abstract action or move_base action that hasn't been solved
             if '--no-' in name or incomplete_action:
-                self.replan(observation)
-                return self.process_plan(observation)
+                # self.replan(observation)         ### added Disha
+                # return self.process_plan(observation)   ### added Disha
+ 
+                self.refine_plan(action, observation)   ### added Disha
             else:
                 if self.env_execution is not None and name in self.env_execution.domain.operators:
                     self._update_state(action)

@@ -46,7 +46,8 @@ def data_generation_process(config, world_only=False):
     new_config = copy.deepcopy(config)
     seed = config.seed
     if seed is None:
-        seed = random.randint(0, 10 ** 6 - 1)
+        # seed = random.randint(0, 10 ** 6 - 1)
+        seed = 30              ### 43, 30
         new_config.seed = seed
     set_random_seed(seed)
     set_numpy_seed(seed)

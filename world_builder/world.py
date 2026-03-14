@@ -590,6 +590,8 @@ class World(WorldBase):
         elif not isinstance(obj, Robot):
             BODY_TO_OBJECT[body] = obj
             self.get_doors_drawers(obj.body, skippable=True)
+            # self.get_doors_drawers(obj.body, skippable=False)
+
 
         ## robot
         else:

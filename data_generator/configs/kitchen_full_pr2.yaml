@@ -42,6 +42,7 @@ world:
   ##         followed by builder specific arguments
   builder_name: 'test_kitchen_full'
   # builder_name: 'test_fridge_table'
+  # builder_name: 'test_salter_from_drawers'
   builder_kwargs:
     movable_categories: ['edible']
     goal_predicates: ['openedjoint', 'holding', 'on', 'in']

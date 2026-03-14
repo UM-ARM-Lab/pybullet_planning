@@ -1,4 +1,5 @@
 # from world_builder.loaders_partnet_kitchen import *
+# from pybullet_planning.world_builder.builders import test_salter_from_drawer
 from world_builder.loaders_partnet_kitchen_test_disha import *
 
 from world_builder.actions import pull_actions, pick_place_actions
@@ -7,6 +8,59 @@ from robot_builder.robot_builders import build_robot_from_args
 from robot_builder.robots import PR2Robot
 
 from problem_sets.problem_utils import problem_template
+
+
+def salter_from_drawer_goal(world):
+    """
+    Full-kitchen goal (case 7): salter is hidden in one of the CabinetLower drawers;
+    goal is to retrieve it and place it on a counter.
+
+    Requires world.note == 7 so that load_furniture forces CabinetLower -> instance 45213
+    (the only instance that has 2 slider drawers + interior space).
+    """
+    arm = world.robot.arms[0]
+    pigi_pull_actions = ['grasp_handle', 'pull_handle', 'ungrasp_handle']
+
+    # Find all CabinetLower objects and register their drawers.
+    cabinets = world.cat_to_objects('CabinetLower')
+    drawer_cabinets = []  # list of (cabinet, drawers, space_name)
+    for cabinet in cabinets:
+        _, drawers, _ = world.get_doors_drawers(cabinet.body, skippable=False)
+        if not drawers:
+            continue
+        # Register one interior space for this cabinet.
+        spaces = list(get_partnet_spaces(cabinet.path, cabinet.body))
+        if not spaces:
+            continue
+        b, _, l = spaces[0]
+        space_name = f'{cabinet.name}::drawer_storage'
+        world.add_object(Space(b, l, name=space_name))
+        drawer_cabinets.append((cabinet, drawers, space_name))
+        if len(drawer_cabinets) == 2:
+            break
+
+    assert len(drawer_cabinets) > 0, 'No CabinetLower with drawers found. Ensure world.note=7.'
+
+    # Randomly pick which cabinet holds the salter.
+    chosen_cabinet, chosen_drawers, chosen_space_name = random.choice(drawer_cabinets)
+    chosen_joint = chosen_drawers[0]  # (body, joint_idx)
+
+    # Load salter, open drawer to place it, then close.
+    salter = world.add_object(Movable(load_asset('salter', random_instance=True), category='salter'))
+    world.add_to_cat(salter, 'graspable')
+    world.open_joint(chosen_joint[0], chosen_joint[1])
+    world.put_in_space(salter, chosen_space_name)
+    world.close_joint(chosen_joint[0], chosen_joint[1])
+
+    # Goal: place salter on a counter.
+    dest_counter = world.name_to_body('shelf')
+
+    goals = [('On', salter.body, dest_counter)]
+    skeleton = [(k, arm, chosen_joint) for k in pigi_pull_actions]
+    skeleton += [(k, arm, salter.body) for k in pick_place_actions]
+    objects = [salter.body, chosen_joint]
+
+    return goals, skeleton, objects
 
 
 def test_full_kitchen_domain(args, world_loader_fn, x_max=3, **kwargs):
@@ -31,7 +85,7 @@ def test_full_kitchen(args, **kwargs):
         world.set_learned_pose_list_gen(check_kitchen_placement)
 
         # case = random.choice(world_builder_args['goal_variations'])
-        case = 7
+        case = 8
         world.note = case
 
         movables, counters = sample_full_kitchen(world, pause=False, reachability_check=False,
@@ -62,7 +116,12 @@ def test_full_kitchen(args, **kwargs):
             goals, skeleton, objects = gather_ingredients_to_counter_modified(world, movables, counters)
 
         elif case == 7:
+            # goals, skeleton, objects = salter_from_drawer_goal(world)
             goals, skeleton, objects = fridge_item_to_counter(world, movables, counters)
+
+
+        elif case == 8:
+            goals, skeleton, objects = find_salter_from_drawers(world)
 
         elif case in [551, 552, 553, 554, 555]:
             goals, skeleton, objects = sample_full_kitchen_goal_demo(world, counters)
@@ -691,10 +750,75 @@ def fridge_item_to_counter(world, movables, counters):
     #     skeleton += [(k, arm, door) for k in pigi_pull_actions]   ## close
 
     goals = [('On', item.body, target_counter) for item in fridge_items]
-    # goals += [('ClosedJoint', door) for door in minifridge_doors]
+    goals += [('ClosedJoint', door) for door in minifridge_doors]
+
+
+    ## salter in overhead cabinet — doors already opened/hidden above, no door constraint needed
+    ## (cabinettop joints are excluded from planning, so forall precondition is vacuously satisfied)
+ 
+ 
+    # cabinet_items = world.cat_to_objects('salter')
+    # for item in cabinet_items:
+    #     world.add_to_cat(item.body, 'movable')
+    # objects += cabinet_items
+    # for item in cabinet_items:
+    #     skeleton += [(k, arm, item.body) for k in pick_place_actions]
+    # goals += [('On', item.body, target_counter) for item in cabinet_items]
 
     return goals, skeleton, objects
 
+
+
+def find_salter_from_drawers(world):
+    """
+    case 8: salter is pre-loaded inside CabinetLower by load_storage_spaces.
+    The cabinet door is opened at scene load (CabinetLower has no handle-grasp data,
+    so the door is excluded from planning — JointOfSpace precondition vacuously satisfied).
+    Goal: pick up the salter directly.
+    """
+    objects = []
+    skeleton = []
+
+    lid = world.name_to_object('braiserlid')
+    world.remove_object(lid)
+
+    ovencounter = world.name_to_body('ovencounter')
+    world.add_to_cat(ovencounter, 'supporter')
+
+    ## move braiserbody into the overhead cabinet (cabinettop) to clear the workspace
+    cabinettop = world.name_to_object('cabinettop')
+    if cabinettop is not None:
+        cabinettop_space = world.name_to_object('cabinettop::storage')
+        world.open_doors_drawers(cabinettop, hide_door=True)
+
+        braiserbody = world.name_to_object('braiserbody')
+        cabinettop_space.place_obj(braiserbody)
+        braiserbody.adjust_pose(yaw=PI / 2)
+        if isinstance(world.robot, PR2Robot):
+            dx = cabinettop_space.aabb().upper[0] - braiserbody.aabb().upper[0] - 0.05
+            braiserbody.adjust_pose(dx=dx, dz=0.05)
+            world.add_highlighter(braiserbody)
+            if collided(braiserbody.body, [cabinettop], articulated=False, world=world, verbose=True, min_num_pts=0):
+                print(f'braiserbody !!! object collided with cabinettop')
+
+    ## goal: pick up salter from cabinetlower
+    ## salter is placed there by load_storage_spaces; door is pre-opened and excluded from planning
+    arm = world.robot.arms[0]
+
+    salter_candidates = world.cat_to_bodies('salter')
+    assert salter_candidates, 'No salter found — check load_storage_spaces places salter in cabinetlower'
+    salter = salter_candidates[0]
+    world.add_to_cat(salter, 'movable')
+
+    lower_cabinets = world.cat_to_objects('cabinetlower')
+    assert lower_cabinets, 'No cabinetlower found in scene'
+    cabinetlower = lower_cabinets[0]
+    cabinetlower_space = world.name_to_object('cabinetlower::storage')
+
+    objects = [salter, cabinetlower, cabinetlower_space]
+    goals = [('Holding', arm, salter)]
+
+    return goals, skeleton, objects
 
 def test_kitchen_dinner(args, **kwargs):
     def loader_fn(world, **world_builder_args):
