@@ -563,6 +563,20 @@ def sample_kitchen_full_goal(world, movable_categories=['edible', 'bottle'],
     #     world.remove_bodies_from_planning(goals=goals, exceptions=objects)
     #     return goals
 
+    #### Debugging - first lets get the robot to open the dishwasher door to make sure the door handles and other parts are defined corrcetly and the robot can perform opening action 
+    
+    dishwasher_objs = world.cat_to_objects('dishwasherbox')
+    if dishwasher_objs:
+        dishwasher = dishwasher_objs[0]
+        load_storage_mechanism(world, dishwasher, epsilon=0.0)  ## register door, keep closed
+        if dishwasher.doors:
+            door = dishwasher.doors[0]  ## (body, joint) tuple
+            objects += [door]
+            world.close_joint(door[0], door[1])  ## ensure closed at start
+            goals = [('OpenedJoint', door)]
+            world.remove_bodies_from_planning(goals=goals, exceptions=objects)
+            return goals
+
 
     ### ----------------------------------------
 

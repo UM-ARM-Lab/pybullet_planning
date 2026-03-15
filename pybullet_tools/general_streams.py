@@ -14,7 +14,8 @@ from pybullet_tools.utils import invert, ConfSaver, get_name, set_pose, get_link
     get_joint_limits, unit_pose, point_from_pose, draw_point, PI, quat_from_pose, angle_between, \
     tform_point, interpolate_poses, draw_pose, RED, remove_handles, stable_z, wait_unlocked, \
     get_aabb_center, set_renderer, timeout, get_aabb_extent, wait_if_gui, wait_for_duration, \
-    get_joint_type, PoseSaver, draw_aabb, LockRenderer, get_unit_vector, unit_quat, get_center_extent
+    get_joint_type, PoseSaver, draw_aabb, LockRenderer, get_unit_vector, unit_quat, get_center_extent, \
+    AABB, get_joint_info, link_from_name
 from pybullet_tools.pr2_primitives import Pose, Grasp, APPROACH_DISTANCE, GRASP_LENGTH
 
 from pybullet_tools.bullet_utils import nice, visualize_point, collided, is_box_entity, \
@@ -616,6 +617,12 @@ def sample_joint_position_gen(problem, num_samples=14, p_max=PI, to_close=False,
         if lower < -p_max:
             lower = max([lower, -p_max])
 
+        ## For dishwasher joints: sample only a small crack-open position (~0.5 rad / 28°).
+        ## The door will be opened fully programmatically after plan execution.
+        _obj = world.body_to_object(o[0]) if hasattr(world, 'body_to_object') else None
+        if _obj is not None and 'dishwasher' in getattr(_obj, 'category', '').lower() and not is_drawer:
+            upper = min(upper, 0.5)
+
         x_min = lower
         x_max = upper
 
@@ -866,6 +873,61 @@ def get_handle_grasp_list_gen(problem, collisions=True, num_samples=10, **kwargs
     return gen
 
 
+def get_handle_mesh_center_from_urdf(urdf_path, door_link_name):
+    """
+    Find the handle visual in the door link, load its OBJ mesh, and return
+    the mesh centroid in the link-local frame as (x, y, z).
+    Falls back to the visual origin if the mesh can't be read.
+    Returns None if no handle visual exists in the door link.
+    """
+    import os
+    import xml.etree.ElementTree as ET
+    urdf_dir = os.path.dirname(urdf_path)
+    try:
+        tree = ET.parse(urdf_path)
+        root = tree.getroot()
+    except Exception:
+        return None
+    for link_elem in root.findall('link'):
+        if link_elem.get('name') != door_link_name:
+            continue
+        for visual in link_elem.findall('visual'):
+            if 'handle' not in (visual.get('name') or ''):
+                continue
+            # Visual frame offset relative to link frame (translation only for PartNet)
+            origin_elem = visual.find('origin')
+            offset = np.zeros(3)
+            if origin_elem is not None:
+                offset = np.array([float(v) for v in origin_elem.get('xyz', '0 0 0').split()])
+            # Locate the mesh file
+            geom = visual.find('geometry')
+            if geom is None:
+                return tuple(offset)
+            mesh_elem = geom.find('mesh')
+            if mesh_elem is None:
+                return tuple(offset)
+            mesh_rel = mesh_elem.get('filename', '')
+            mesh_path = os.path.join(urdf_dir, mesh_rel)
+            # Read OBJ vertices
+            vertices = []
+            try:
+                with open(mesh_path) as f:
+                    for line in f:
+                        if line.startswith('v '):
+                            parts = line.split()
+                            vertices.append([float(x) for x in parts[1:4]])
+            except Exception:
+                return tuple(offset)
+            if not vertices:
+                return tuple(offset)
+            v = np.array(vertices)
+            # Transform mesh vertices to link-local frame (visual origin is a translation offset)
+            v_local = v + offset
+            center = (v_local.min(axis=0) + v_local.max(axis=0)) / 2
+            return tuple(center)
+    return None
+
+
 def get_handle_grasp_gen(problem, collisions=False, max_samples=2,
                          randomize=False, visualize=False, retain_all=False, verbose=False):
     collisions = True
@@ -881,9 +943,36 @@ def get_handle_grasp_gen(problem, collisions=False, max_samples=2,
         grasp_length = 0.13 if is_knob else 0.1
         # print(f'{title} handle_link of body_joint {body_joint} is {handle_link}')
 
+        # When find_handle_link() fell back to the door link itself (no separate handle
+        # link in the URDF), try to recover a tighter AABB from a 'handle-*' visual
+        # embedded in the door link (e.g. DishwasherBox assets).
+        aabb_override = None
+        door_link_name = get_joint_info(body, joint).linkName.decode("utf-8")
+        door_link_idx = link_from_name(body, door_link_name)
+        if handle_link == door_link_idx:
+            obj = world.body_to_object(body)
+            urdf_path = getattr(obj, 'path', None)
+            if urdf_path is not None:
+                local_origin = get_handle_mesh_center_from_urdf(urdf_path, door_link_name)
+                if local_origin is not None:
+                    # aabb_override must be in link-local frame (same as draw_fitted_box output),
+                    # not world frame. local_origin is already in link_4's local frame.
+                    lx, ly, lz = local_origin
+                    half = 0.05  # 10 cm cube around handle mesh centroid
+                    aabb_override = AABB(
+                        lower=(lx - half, ly - half, lz - half),
+                        upper=(lx + half, ly + half, lz + half),
+                    )
+                    ## Debug: show world position for verification
+                    # link_pose = get_link_pose(body, handle_link)
+                    # handle_world = multiply(link_pose, (local_origin, (0, 0, 0, 1)))
+                    # print(f'{title} handle mesh center: local={nice(local_origin)} world={nice(handle_world[0])}'
+                    #       f' | aabb={aabb_override}')
+
         grasps = get_hand_grasps(world, body, link=handle_link, handle_filter=True,
                                  length_variants=True, grasp_length=grasp_length,
-                                 visualize=visualize, verbose=verbose, retain_all=retain_all)
+                                 visualize=visualize, verbose=verbose, retain_all=retain_all,
+                                 aabb_override=aabb_override)
 
         if verbose: print(f'\n{title} grasps =', [nice(g) for g in grasps])
 

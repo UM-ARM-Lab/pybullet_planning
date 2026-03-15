@@ -646,8 +646,9 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
             trials -= 1
             if trials == 0:
                 print('cant ensure_cfree')
-                sys.exit()
-                # return None
+                # sys.exit()
+                world.remove_object(obj, verbose=verbose)
+                return None
             again = check_conditions(obj)
         return obj
 
@@ -665,6 +666,7 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
         obj = place_on_counter(obj_cat, category=obj_category, **kwargs)
         check_size_matter(obj)
         obj = ensure_cfree(obj, obstacles, obj_name=obj_cat, category=obj_category, **kwargs)
+        if obj is None: continue
         in_braiser = in_braiser or 'braiser_bottom' in obj.supporting_surface.name
         food_ids.append(obj)
         obstacles.append(obj.body)
@@ -678,6 +680,7 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
             kwargs['ins'] = instances['bottle'][i]
         obj = place_on_counter(obj_cat)
         obj = ensure_cfree(obj, obstacles, obj_name='bottle', **kwargs)
+        if obj is None: continue
         bottle_ids.append(obj)
         obstacles.append(obj.body)
 
@@ -687,6 +690,7 @@ def load_counter_movables(world, counters, d_x_min=None, obstacles=[],
         obj = place_on_counter('medicine')
         obj = ensure_cfree(obj, obstacles, obj_name='medicine')
         # state = State(copy.deepcopy(world), gripper=state.gripper)
+        if obj is None: continue
         medicine_ids.append(obj)
         obstacles.append(obj.body)
 

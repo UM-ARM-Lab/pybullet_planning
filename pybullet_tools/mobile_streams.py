@@ -985,7 +985,11 @@ def compute_pull_door_arm_motion(inputs, world, robot, obstacles, ignored_pairs,
     a, o, pst1, pst2, g, bq1, aq1 = inputs
     is_knob = o in world.cat_to_bodies('knob')
 
-    collision_fn = robot.get_collision_fn(obstacles=obstacles, verbose=verbose)
+    # Exclude the pulled body from all robot collision checks during pull:
+    # the robot is physically holding the door so contact with it is expected.
+    other_obstacles = [mm for mm in obstacles if mm != o[0]]
+    # collision_fn = robot.get_collision_fn(obstacles=obstacles, verbose=verbose)
+    collision_fn = robot.get_collision_fn(obstacles=other_obstacles, verbose=verbose)
 
     if pst1.value == pst2.value:
         return None
@@ -997,7 +1001,6 @@ def compute_pull_door_arm_motion(inputs, world, robot, obstacles, ignored_pairs,
 
     arm_joints = robot.get_arm_joints(a)
     resolutions = resolution * np.ones(len(arm_joints))
-    other_obstacles = [mm for mm in obstacles if mm != o[0]]
 
     # BODY_TO_OBJECT = problem.world.BODY_TO_OBJECT
     # joint_object = BODY_TO_OBJECT[o]
@@ -1058,10 +1061,10 @@ def compute_pull_door_arm_motion(inputs, world, robot, obstacles, ignored_pairs,
         found_collision = False
         if collisions:
             col_kwargs = dict(articulated=False, world=world, verbose=verbose)
-            if collided(robot, obstacles, **col_kwargs):
+            if collided(robot, other_obstacles, **col_kwargs):
                 found_collision = True
                 if verbose:
-                    print('[COLLISION 1]\tcollided(robot, obstacles, **col_kwargs)')
+                    print('[COLLISION 1]\tcollided(robot, other_obstacles, **col_kwargs)')
             if collided(o[0], other_obstacles, ignored_pairs=ignored_pairs, **col_kwargs):
                 found_collision = True
                 if verbose:

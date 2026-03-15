@@ -318,7 +318,8 @@ def make_nudge_grasps_from_handle_grasps(world, found_hand_grasps, body, body_po
 def get_hand_grasps(world, body, link=None, grasp_length=0.1, visualize=False,
                     handle_filter=False, length_variants=False, use_all_grasps=True,
                     retain_all=False, verbose=True, collisions=False, debug_del=False,
-                    test_offset=False, skip_grasp_index_until=None, nudge=False, nudge_back=False):
+                    test_offset=False, skip_grasp_index_until=None, nudge=False, nudge_back=False,
+                    aabb_override=None):
     body_name = (body, None, link) if link is not None else body
     title = f'grasp_utils.get_hand_grasps({body_name}) | '
     dist = grasp_length
@@ -328,7 +329,10 @@ def get_hand_grasps(world, body, link=None, grasp_length=0.1, visualize=False,
     # using_grasp_link, link = check_grasp_link(world, body, link)
 
     body_pose = get_model_pose(body, link=link, verbose=verbose)
-    aabb, handles = draw_fitted_box(body, link=link, verbose=verbose, draw_box=False, draw_centroid=False)
+    if aabb_override is not None:
+        aabb, handles = aabb_override, []
+    else:
+        aabb, handles = draw_fitted_box(body, link=link, verbose=verbose, draw_box=False, draw_centroid=False)
 
     ## grasp the whole body
     if link is None:

@@ -85,7 +85,7 @@ def test_full_kitchen(args, **kwargs):
         world.set_learned_pose_list_gen(check_kitchen_placement)
 
         # case = random.choice(world_builder_args['goal_variations'])
-        case = 8
+        case = 7
         world.note = case
 
         movables, counters = sample_full_kitchen(world, pause=False, reachability_check=False,
@@ -216,17 +216,17 @@ def sample_full_kitchen_goal_rearrange_to_storage(world, movables, counters):
         # world.add_highlighter(f)
         objects.append(f)
         skeleton.extend([(k, arm, f) for k in pick_place_actions])
-        # goals.append(('In', f, container_space))
+        goals.append(('In', f, container_space))
     # skeleton.append(('declare_store_in_space', '@edible'))
 
     # set_camera_target_body(foods[0])
-    # goals += [('In', food, container_space) for food in foods[1:]]
-    # goals += [('GraspedHandle', container.doors[0])]  ## right arm, (9, 1)
+    goals += [('In', food, container_space) for food in foods[1:]]
+    goals += [('GraspedHandle', container.doors[0])]  ## right arm, (9, 1)
     # goals += [('OpenedJoint', container.doors[1])]  ## right arm, (9, 3)
-    # goals += [('OpenedJoint', door) for door in container.doors]
+    goals += [('OpenedJoint', door) for door in container.doors]
     # goals = [('OpenedJoint', container.doors[0]), ('OpenedJoint', container.doors[1]),
     #          ('StoredInSpace', f'@{movable_type}', container_space)]
-    # goals += [('On', food, counter) for food in foods]
+    goals += [('On', food, counter) for food in foods]
     goals += [('In', food, container_space) for food in foods[:1]]
     # goals = [('StoredInSpace', f'@{movable_type}', container_space)]
 
@@ -347,7 +347,9 @@ def sample_full_kitchen_goal_demo(world, counters):
         potato = world.name_to_object('potato')
         zucchini = world.name_to_object('zucchini')
         # world.name_to_object('braiser_bottom').place_obj(potato, world=world)
-        counters[0].place_obj(zucchini, world=world)
+        # counters[0].place_obj(zucchini, world=world)
+        counters[0].place_obj(zucchini)
+
         world.remove_object(lid)
         zucchini = zucchini.body
         world.add_to_cat(zucchini, 'movable')
@@ -362,7 +364,9 @@ def sample_full_kitchen_goal_demo(world, counters):
         """ pick up medicine from sink with bottles in it , seed=892751 """
         artichoke = world.name_to_object('artichoke')
         sink_obj = world.name_to_object('sink_bottom')
-        sink_obj.place_obj(artichoke, world=world)
+        # sink_obj.place_obj(artichoke, world=world)
+        sink_obj.place_obj(artichoke)
+
         y = get_aabb_center(sink_obj.aabb())[1] - 0.1
         x = sink_obj.aabb().lower[0] + 0.13
         artichoke.adjust_pose(x=x, y=y, yaw=-1.7, world=world)

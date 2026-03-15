@@ -27,6 +27,20 @@ from world_builder.actions import apply_commands
 from world_builder.builders import sample_world_and_goal, save_world_problem
 
 
+def open_dishwasher_doors_fully(world, goal):
+    """After plan execution, programmatically open any dishwasher doors in the goal to their max position.
+    The planner only cracks the door open (small angle); this step completes the opening."""
+    from pybullet_tools.utils import set_joint_position, get_max_limit
+    for goal_item in (goal or []):
+        if goal_item[0] == 'OpenedJoint':
+            body_id, joint_idx = goal_item[1]
+            obj = world.body_to_object(body_id)
+            if obj is not None and 'dishwasher' in getattr(obj, 'category', '').lower():
+                max_pos = get_max_limit(body_id, joint_idx)
+                set_joint_position(body_id, joint_idx, max_pos)
+                print(f'[Post-execution] Opened dishwasher door ({body_id}, {joint_idx}) to {max_pos:.3f} rad')
+
+
 def data_generation_process(config, world_only=False):
     """ exist a version in cognitive-architectures for generating mini-datasets (single process),
         run in kitchen-worlds for parallelization, but no reliable planning time data
@@ -155,6 +169,7 @@ def data_generation_process(config, world_only=False):
         if visualize:
             wait_if_gui('Execute?')
         apply_commands(state, commands, time_step=config.sim.time_step, verbose=False)
+        open_dishwasher_doors_fully(world, goal)
         if visualize:
             wait_if_gui('Exit?')
     print(SEPARATOR)
